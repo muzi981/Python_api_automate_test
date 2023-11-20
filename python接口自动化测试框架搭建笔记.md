@@ -1,0 +1,189 @@
+### 一、Requests库的熟悉
+
+------
+
+#### 一、Requests库（Requests底层源码的调用逻辑）介绍
+
+##### 1、（requests请求部分介绍）：
+
+```python
+requests.get()
+requests.post()
+requests.put()
+requests.delete()
+
+-------------------------------------------------------------------
+def get(url, params=None, **kwargs):
+	1、url:请求地址
+	2、params:请求参数   get请求的URL后面传递的参数；
+	3、**kwargs:可变长度字典
+
+def post(url, data=None, json=None, **kwargs):
+	1、url:请求地址
+	2、data:请求参数(表单参数)(X-www-form-urlencoded)
+	3、json:请求参数(json格式参数)(application/json)
+	4、**kwargs:可变长度字典
+
+def put(url, data=None, **kwargs):
+	1、url:请求地址
+	2、data:请求参数(表单参数)
+	3、**kwargs:可变长度字典 
+
+def delete(url, **kwargs):
+	1、url:请求地址
+	2、**kwargs:可变长度字典 
+
+-------------------------------------------------------------------
+1、上面的四个方法最终都是调用request方法:
+	return request("get", url, params=params, **kwargs)
+
+2、所以request.get()对应的也就是:
+	requests.request("get", url, params=params, **kwargs)
+
+-------------------------------------------------------------------
+def request(method, url, **kwargs):     //request()方法；
+    with sessions.Session() as session:
+        return session.request(method=method, url=url, **kwargs)
+    
+request()方法最后调用的就是session.request()方法：       
+	session.request(method=method, url=url, **kwargs)
+session.request()最终调用结果如下：
+	def request(
+        self,
+        method,                     请求方式
+        url,												请求路径
+        params=None,								params参数
+        data=None,									表单参数
+        headers=None,								请求头
+        cookies=None,								cookies信息
+        files=None,									文件上传
+        auth=None,									鉴权
+        timeout=None,								超时
+        allow_redirects=True,				重定向
+        proxies=None,								设置代理
+        hooks=None,									钩子函数
+        stream=None,								文件下载
+        verify=None,								证书验证
+        cert=None,									CA证书
+        json=None,									JSON参数
+    ):
+```
+
+> requests.request()和session.request()的区别：前者每个请求都是独立的，后者会自动关了所有请求的cookie信息。
+
+##### 2、Requests库响应部分
+
+```python
+res.text                //返回字符串形式结果
+res.json()							//返回JSON格式结果，字典形式结果
+res.content()						//返回字节类型结果，二进制结果
+res.status_code					//返回状态码
+res.reason							//返回状态信息
+res.cookie							//返回cookie信息
+res.encoding						//返回编码格式
+res.headers							//返回响应头
+res.request.xxx					//得到请求数据
+```
+
+#### 二、Requests接口自动化实战
+
+##### 1、接口关联的三个层次
+
+1. 通过类变量保存中间变量实现接口关联；
+
+   1. 定义一个类变量，将接口中提取的Tooke值通过    类名.类变量名=tooke来 赋值
+
+   2. 然后再下一个接口调用中直接使用类变量即可
+
+   3. 例如：
+
+      ```python
+      import jsonpath
+      import requests
+      import re
+      
+      class TestApi:
+          # 创建类变量
+          Token = ''
+      
+          # 获取微信鉴权码信息
+          def test_weixin_cookie(self):
+              url = "https://api.weixin.qq.com/cgi-bin/token"
+              data = {
+                  "grant_type": "client_credential",
+                  "appid": "wx6dc7e0c9a47ec89d",
+                  "secret": "79020ddd6bf173ee4d0223266f9f67b7"
+              }
+              res_get = requests.get(url=url, params=data)       # 发送请求 get
+              text = res_get.text        # 返回字符串形式结果
+              json = res_get.json()      # 返回JSON格式结果，字典形式结果
+      
+              # 使用正则表达式提取token值
+              result = re.search('access_token":"(.*?)"', text)
+              TestApi.Token = result.group(1)
+              print(TestApi.Token)
+              # 提取json格式结果中token值 方法一：
+              TestApi.Token = json["access_token"]
+              print(TestApi.Token)
+              # 使用JsonPath提取token值  方法二：
+              TestApi.Token = jsonpath.jsonpath(json, "$.[access_token]")
+              print(TestApi.Token[0])
+      
+      if __name__ == '__main__':
+          TestApi().test_weixin_cookie()
+      ```
+
+2. 通过单独的文件保存中间变量实现接口关联；
+
+3. 极限封装成0代码模式实现接口关联；
+
+##### 2、接口关联的二种方式
+
+1. 正则表达式提取实现接口关联：
+   1. re.seach()通过正则匹配一个值，通过下标[1]取值，如果未匹配到则返回none；
+   2. re.findall()通过正则匹配多个值，返回List，通过下标取值，没有匹配到返回none；
+2. JsonPath提取实现接口关联：
+   1. jsonpath.jsonpath()   返回一个列表，通过下标取值，没找到返回none
+3. 接口返回json格式结果，然后直接取值也可以例如   token = json["access_token"]
+
+以上三种实例：
+
+```python
+import jsonpath
+import requests
+import re
+
+class TestApi:
+
+    # 获取微信鉴权码信息
+    def test_weixin_cookie(self):
+        url = "https://api.weixin.qq.com/cgi-bin/token"
+        data = {
+            "grant_type": "client_credential",
+            "appid": "wx6dc7e0c9a47ec89d",
+            "secret": "79020ddd6bf173ee4d0223266f9f67b7"
+        }
+        res_get = requests.get(url=url, params=data)          # 发送请求 get
+        text = res_get.text                                   # 返回字符串形式结果
+        json = res_get.json()                                 # 返回JSON格式结果，字典形式结果
+        print("\ntext格式结果：", text)
+        print("JSON格式结果：", json)
+        # 使用正则表达式提取token值
+        result = re.search('access_token":"(.*?)"', text)
+        token = result.group(1)
+        print(token)
+        # 提取json格式结果中token值 方法一：
+        token = json["access_token"]
+        print(token)
+        # 使用JsonPath提取token值  方法二：
+        token = jsonpath.jsonpath(json, "$.[access_token]")
+        print(token[0])
+
+if __name__ == '__main__':
+    TestApi().test_weixin_cookie()
+```
+
+### 二、接口自动化的封装
+
+------
+
